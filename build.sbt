@@ -3,6 +3,8 @@ ThisBuild / organization := "com.mihainicola"
 ThisBuild / version := "0.0.1-SNAPSHOT"
 
 val sparkVersion = "2.4.6"
+val akkaVersion = "2.5.20"
+val akkaHttpVersion = "10.1.12"
 
 lazy val root = (project in file(".")).
   settings(
@@ -18,8 +20,13 @@ lazy val root = (project in file(".")).
     // coverageHighlighting := true,
 
     libraryDependencies ++= Seq(
-      "org.apache.spark"    %% "spark-core"         % sparkVersion          % Provided,
+      "org.apache.spark"    %% "spark-core"         % sparkVersion,
+      "com.typesafe.akka"   %% "akka-actor-typed"   % akkaVersion,
+      "com.typesafe.akka"   %% "akka-stream"        % akkaVersion,
+      "com.typesafe.akka"   %% "akka-http"          % akkaHttpVersion,
+      "com.typesafe.akka"   %% "akka-http-spray-json"     % akkaHttpVersion,
       "com.github.scopt"    %% "scopt"              % "3.7.1"               % Compile,
+      "org.apache.livy"     %  "livy-api"           % "0.7.0-incubating",
       "org.apache.livy"     %  "livy-client-http"   % "0.7.0-incubating",
       "org.apache.livy"     %% "livy-scala-api"     % "0.7.0-incubating",
 
@@ -45,8 +52,6 @@ lazy val root = (project in file(".")).
 
     assemblyMergeStrategy in assembly := {
       case PathList("META-INF", xs @ _*) => MergeStrategy.discard
-      case x =>
-        val oldStrategy = (assemblyMergeStrategy in assembly).value
-        oldStrategy(x)
+      case x => MergeStrategy.first
     }
   )
