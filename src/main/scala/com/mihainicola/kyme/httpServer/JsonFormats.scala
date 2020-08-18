@@ -1,6 +1,7 @@
 package com.mihainicola.kyme.httpServer
 
-import com.mihainicola.kyme.Model.{JobSubmission, JobSubmissionResponse}
+import com.mihainicola.kyme.Model.{JobSubmission}
+import com.mihainicola.kyme.actors.JobSubmissionResponse
 import spray.json.DefaultJsonProtocol
 
 object JsonFormats {
@@ -9,5 +10,5 @@ object JsonFormats {
 
   implicit val jobSubmissionJsonFormat = jsonFormat3(JobSubmission)
 
-  implicit val jobSubmissionResponseJsonFormar = jsonFormat1(JobSubmissionResponse)
+  implicit val jobSubmissionResponseJsonFormat = jsonFormat1(JobSubmissionResponse)
 }

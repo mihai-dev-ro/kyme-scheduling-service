@@ -1,42 +1,47 @@
 package com.mihainicola.kyme.httpServer
 
-import akka.actor.typed.ActorSystem
+import akka.actor.typed.{ActorSystem, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.scaladsl.adapter._
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.server.Route
+import akka.stream.ActorMaterializer
+import akka.{Done, actor}
 import com.mihainicola.kyme.actors._
 
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
 
-object App {
-  //#start-http-server
-  private def startHttpServer(routes: Route)(implicit system: ActorSystem[_]): Unit = {
-    // Akka HTTP still needs a classic ActorSystem to start
-    import system.executionContext
+object JobSubmissionAkkaHttpServer {
 
-    val futureBinding = Http().newServerAt("localhost", 8080).bind(routes)
-    futureBinding.onComplete {
-      case Success(binding) =>
-        val address = binding.localAddress
-        system.log.info("Server online at http://{}:{}/", address.getHostString, address.getPort)
-      case Failure(ex) =>
-        system.log.error("Failed to bind HTTP endpoint, terminating system", ex)
-        system.terminate()
+  def apply(): Behavior[Done] = Behaviors.setup { ctx =>
+    // http doesn't know about akka typed so create untyped system/materializer
+    implicit val untypedSystem: actor.ActorSystem = ctx.system.toUntyped
+    implicit val materializer: ActorMaterializer = ActorMaterializer()(ctx.system.toUntyped)
+    implicit val ec: ExecutionContextExecutor = ctx.system.executionContext
+
+    val userSubmissionRoutesRef = ctx.spawn(JobSubmissionActor(Map.empty), "jobSubmissionMainActor")
+
+    val routes = new JobSubmissionRoutes(ctx.system, userSubmissionRoutesRef)
+
+    val serverBinding: Future[Http.ServerBinding] = Http()(untypedSystem).bindAndHandle(
+      routes.routes, "localhost", 8080)
+    serverBinding.onComplete {
+      case Success(bound) =>
+        println(s"Server online at " +
+          s"http://${bound.localAddress.getHostString}:${bound.localAddress.getPort}/")
+      case Failure(e) =>
+        Console.err.println(s"Server could not start!")
+        e.printStackTrace()
+        ctx.self ! Done
+    }
+
+    Behaviors.receiveMessage {
+      case Done =>
+        Behaviors.stopped
     }
   }
-  //#start-http-server
+
   def main(args: Array[String]): Unit = {
-    //#server-bootstrapping
-    val rootBehavior = Behaviors.setup[Nothing] { context =>
-      val jobSubmissionActor = context.spawn(JobSubmissionActor(Map.empty), "JobSubmissionActor")
-      context.watch(jobSubmissionActor)
-
-      val jobSubmissionRoutes = new JobSubmissionRoutes(jobSubmissionActor)(context.system)
-      startHttpServer(jobSubmissionRoutes.routes)(context.system)
-
-      Behaviors.empty
-    }
-    val system = ActorSystem[Nothing](rootBehavior, "JobSubmissionAkkaHttpServer")
-    //#server-bootstrapping
+    ActorSystem[Done](JobSubmissionAkkaHttpServer(), "JobSubmissionAkkaHttpServer")
   }
 }

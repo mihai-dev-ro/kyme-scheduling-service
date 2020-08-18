@@ -9,8 +9,12 @@ object JobResultsActor {
   def apply(jobId: String, jobHandle: ScalaJobHandle[Array[String]]): Behavior[JobResultsCommand] = {
     Behaviors.receive({ (context, message) =>
       message match {
-        case GetJobResults(replyTo) =>
-          jobHandle.value.map(_.map( x => replyTo ! JobResultsComputed(x, "nothing")))
+        case GetJobResults(replyTo, replyJobResponseTo) =>
+          jobHandle.value.map(_.map( {x =>
+            context.log.info(x.mkString("\n"))
+            replyTo ! JobResultsComputed(x, "nothing")
+            replyJobResponseTo ! JobSubmissionResponse(x.mkString("\n"))
+          }))
           Behaviors.same
       }
     })

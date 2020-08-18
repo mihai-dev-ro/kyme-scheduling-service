@@ -1,5 +1,7 @@
 package com.mihainicola.kyme.actors
 
+import java.util.concurrent.atomic.AtomicLong
+
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import com.mihainicola.KeySearchJobSubmission
@@ -17,21 +19,23 @@ object JobManagerActor {
     pendingSubmittedJobs: Queue[SubmitJob],
     activeJobs: List[ActorRef[JobCommand]]) extends Data
 
+  private val jobCounter = new AtomicLong(0)
+
   def apply(jobManagerId: String, data: Data): Behavior[JobManagerCommand] = {
 
     Behaviors.receive { (context, message) =>
       (message, data) match {
         case (
-          job @ SubmitJob(inputDataLocation, searchKey , resultsLocation, _),
+          job @ SubmitJob(inputDataLocation, searchKey , resultsLocation, _, _),
           Uninitialized
         ) =>
 
           val sharedComputeCtx = context.spawn(
             SharedComputeContextActor(
-              s"sharedComputeContext-${inputDataLocation}",
+              s"sharedComputeContext-${jobManagerId}",
               inputDataLocation
             ),
-            "computeContext"
+            s"sharedComputeContext-${jobManagerId}"
           )
 
           sharedComputeCtx ! InitiateSharedComputeContext(context.self)
@@ -70,14 +74,15 @@ object JobManagerActor {
               spawnedJobs
             } else {
               val (submitJob, tail) = pendingSubmittedJobs.dequeue
+              val id = jobCounter.incrementAndGet()
               val newJob = context.spawn(
                 JobActor(
-                  s"job-${submitJob.searchKey}",
+                  s"job-${id}",
                   submitJob.searchKey,
                   submitJob.resultsLocation
                 ),
-                name = "Job")
-              newJob ! StartComputeJob(jobSubmission, context.self)
+                name = s"job-${id}")
+              newJob ! StartComputeJob(jobSubmission, context.self, submitJob.replyJobResponseTo)
               handlePendingJob(jobSubmission, tail, newJob :: spawnedJobs)
             }
           }
@@ -98,7 +103,7 @@ object JobManagerActor {
           }
 
         case (
-          job @ SubmitJob(_, searchKey, resultsLocation, _),
+          job @ SubmitJob(_, searchKey, resultsLocation, _, replyJobResponseTo),
           processing @ Processing(
             _,
             maybeSparkJobSubmission,
@@ -115,8 +120,9 @@ object JobManagerActor {
             )
           } else {
             maybeSparkJobSubmission.map(jobSubmission => {
-              val newJob = context.spawn(JobActor(s"job-${searchKey}", searchKey, resultsLocation), "Job")
-              newJob ! StartComputeJob(jobSubmission, context.self)
+              val id = jobCounter.incrementAndGet()
+              val newJob = context.spawn(JobActor(s"job-${id}", searchKey, resultsLocation), s"job-${id}")
+              newJob ! StartComputeJob(jobSubmission, context.self, replyJobResponseTo)
               newJob
             }) match {
               case Some(newJob) =>

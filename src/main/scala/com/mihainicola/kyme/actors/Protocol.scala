@@ -2,7 +2,6 @@ package com.mihainicola.kyme.actors
 
 import akka.actor.typed.ActorRef
 import com.mihainicola.KeySearchJobSubmission
-import com.mihainicola.kyme.Model.JobSubmissionResponse
 
 /** 1. Messages to which the main, top level, Actor responds to
  *
@@ -24,6 +23,8 @@ final case class NewJobRequest(
 
 final case class JobProcessing(jobId: String) extends JobSubmissionCommand
 
+final case class JobSubmissionResponse(message: String)
+
 
 /** 2. Messages exchanged with Job Manager
  *
@@ -39,7 +40,8 @@ sealed trait JobManagerCommand
 
 final case class SubmitJob(inputDataLocation: String,
   searchKey: String, resultsLocation: String,
-  replyTo: ActorRef[JobProcessing])
+  replyTo: ActorRef[JobProcessing],
+  replyJobResponseTo: ActorRef[JobSubmissionResponse])
   extends JobManagerCommand
 
 final case class DataLoaded(summaryNbLines: Long) extends JobManagerCommand
@@ -85,8 +87,9 @@ final case class LoadDataInSharedComputeContext(
 sealed trait JobCommand
 final case class StartComputeJob(
   jobSubmission: KeySearchJobSubmission,
-  replyTo: ActorRef[JobManagerCommand])
-  extends JobCommand
+  replyTo: ActorRef[JobManagerCommand],
+  replyJobResponseTo: ActorRef[JobSubmissionResponse]
+) extends JobCommand
 final case class JobStatusUpdate(newStatus: String) extends JobCommand
 final case class JobResultsComputed(results: Array[String], makespanSummary: String)
   extends JobCommand
@@ -97,13 +100,17 @@ final case class JobResultsComputed(results: Array[String], makespanSummary: Str
  * It is in communication with Livy Services
  */
 sealed trait JobStatusCommand
-final case class GetJobStatus(replyTo: ActorRef[JobStatusUpdate])
-  extends JobStatusCommand
+final case class GetJobStatus(
+  replyTo: ActorRef[JobStatusUpdate],
+  replyJobResponseTo: ActorRef[JobSubmissionResponse]
+) extends JobStatusCommand
 
 
 /**
  * Holds to the results of the job
  */
 sealed trait JobResultsCommand
-final case class GetJobResults(replyTo: ActorRef[JobResultsComputed])
-  extends JobResultsCommand
+final case class GetJobResults(
+  replyTo: ActorRef[JobResultsComputed],
+  replyJobResponseTo: ActorRef[JobSubmissionResponse]
+) extends JobResultsCommand

@@ -4,7 +4,7 @@ ThisBuild / version := "0.0.1-SNAPSHOT"
 
 val sparkVersion = "2.4.6"
 val akkaVersion = "2.5.20"
-val akkaHttpVersion = "10.1.12"
+val akkaHttpVersion = "10.1.8"
 
 lazy val root = (project in file(".")).
   settings(
