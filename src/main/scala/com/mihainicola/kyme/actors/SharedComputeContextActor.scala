@@ -10,14 +10,17 @@ import scala.util.{Failure, Success}
 object SharedComputeContextActor {
   def apply(
     sharedComputeContextId: String,
-    inputDataLocation: String
+    inputDataLocation: String,
+    appJars: String
   ): Behavior[SharedComputeContextCommand] = {
     Behaviors.receive {
       (context, message) => {
         message match {
           case InitiateSharedComputeContext(replyTo) =>
-            val keySearchJobSubmission = new KeySearchJobSubmission("http://localhost:8998/")
-            keySearchJobSubmission.init().onComplete({
+            val keySearchJobSubmission = new KeySearchJobSubmission(
+              "http://livy.marathon.l4lb.thisdcos.directory:8998")
+//            val keySearchJobSubmission = new KeySearchJobSubmission("http://localhost:8998")
+            keySearchJobSubmission.initForCluster(appJars.split(",").toList).onComplete({
               case Success(_ ) =>
                 context.log.info("Shared context initiated for data location: {}",
                   inputDataLocation

@@ -10,28 +10,27 @@ import scala.util.{Failure, Success}
 
 object JobStatusActor {
 
-  def apply(jobId: String, jobHandle: ScalaJobHandle[_]): Behavior[JobStatusCommand] = {
+  def apply(jobStatusId: String, jobId: String, searchKey: String,
+    jobHandle: ScalaJobHandle[_]
+  ): Behavior[JobStatusCommand] = {
     Behaviors.receive { (context, message) =>
       message match {
-        case GetJobStatus(replyTo, replyJobResponseTo) =>
+        case GetJobStatus(replyJobProcessingStatusTo) =>
           jobHandle.onComplete({
-            case Success(value) => replyTo ! JobStatusUpdate(s"Job: ${jobId} Completed")
+            case Success(_) =>
+              replyJobProcessingStatusTo ! JobStatusUpdate(jobId, searchKey, "Completed")
             case Failure(e) => {
-              replyJobResponseTo ! JobSubmissionResponse(e.toString)
-              replyTo ! JobStatusUpdate(s"Job: ${jobId} ERROR: ${e}")
+              replyJobProcessingStatusTo ! JobFailed(jobId, searchKey, e.toString())
             }
           })
           jobHandle.onJobQueued({ () =>
-            replyJobResponseTo ! JobSubmissionResponse(s"Job: ${jobId} Queued")
-            replyTo ! JobStatusUpdate(s"Job: ${jobId} Queued")
+            replyJobProcessingStatusTo ! JobStatusUpdate(jobId, searchKey, "Queued")
           })
           jobHandle.onJobStarted({ () =>
-            replyJobResponseTo ! JobSubmissionResponse(s"Job: ${jobId} Started")
-            replyTo ! JobStatusUpdate(s"Job: ${jobId} Started")
+            replyJobProcessingStatusTo ! JobStartProcessing(jobId, searchKey)
           })
           jobHandle.onJobCancelled({ (isCancelled) =>
-            replyJobResponseTo ! JobSubmissionResponse(s"Job: ${jobId} Cancelled")
-            replyTo ! JobStatusUpdate(s"Job: ${jobId} Cancelled: ${isCancelled}")
+            replyJobProcessingStatusTo ! JobStatusUpdate(jobId, searchKey, "Cancelled")
           })
           Behaviors.same
       }

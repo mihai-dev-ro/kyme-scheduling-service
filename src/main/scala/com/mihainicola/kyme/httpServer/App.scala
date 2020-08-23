@@ -19,12 +19,12 @@ object JobSubmissionAkkaHttpServer {
     implicit val materializer: ActorMaterializer = ActorMaterializer()(ctx.system.toUntyped)
     implicit val ec: ExecutionContextExecutor = ctx.system.executionContext
 
-    val userSubmissionRoutesRef = ctx.spawn(JobSubmissionActor(Map.empty), "jobSubmissionMainActor")
+    val userSubmissionRoutesRef = ctx.spawn(JobSubmissionActor(Map.empty, Map.empty), "jobSubmissionMainActor")
 
     val routes = new JobSubmissionRoutes(ctx.system, userSubmissionRoutesRef)
 
     val serverBinding: Future[Http.ServerBinding] = Http()(untypedSystem).bindAndHandle(
-      routes.routes, "localhost", 8080)
+      routes.routes, "0.0.0.0", 7900)
     serverBinding.onComplete {
       case Success(bound) =>
         println(s"Server online at " +

@@ -7,7 +7,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.util.Timeout
 import com.mihainicola.kyme.Model.JobSubmission
-import com.mihainicola.kyme.actors.{JobSubmissionCommand, JobSubmissionResponse, NewJobRequest}
+import com.mihainicola.kyme.actors._
 
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
@@ -32,26 +32,47 @@ class JobSubmissionRoutes(
       jobSubmission.inputLocation,
       jobSubmission.searchKey,
       jobSubmission.resultsLocation,
+      jobSubmission.appJars,
       ref))
+
+  def getJobResult(jobId: String): Future[Option[JobResultResponse]] = {
+    jobSubmissionCoordinator ? (ref => JobResultRequest(jobId, ref))
+  }
+
 
   //#all-routes
   //#job-submit-post
-  val routes: Route =
-  pathPrefix("job-submit") {
-    withRequestTimeout(Duration(100, "seconds")) {
-      concat(
-        //#job-submit-post
-        pathEnd {
-          concat(
-            post {
-              entity(as[JobSubmission]) { jobSubmission =>
-                onSuccess(submitJob(jobSubmission)) { response =>
-                  complete((StatusCodes.Created, response))
+  val routes: Route = concat (
+    pathPrefix("job-submit") {
+      withRequestTimeout(Duration(100, "seconds")) {
+        concat(
+          //#job-submit-post
+          pathEnd {
+            concat(
+              post {
+                entity(as[JobSubmission]) { jobSubmission =>
+                  onSuccess(submitJob(jobSubmission)) { response =>
+                    complete((StatusCodes.Created, response))
+                  }
                 }
-              }
-            })
-        })
+              })
+          },
+          path(Segment) { jobId =>
+            val maybeJobResults: Future[Option[JobResultResponse]] = getJobResult(jobId)
+            rejectEmptyResponse {
+              complete(maybeJobResults)
+            }
+          })
+      }
+    },
+    path("alive") {
+      pathEnd {
+        get {
+          complete(StatusCodes.OK, "I'm alive!!!")
+        }
+      }
     }
-  }
+  )
+
   //#all-routes
 }

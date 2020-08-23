@@ -1,3 +1,5 @@
+import com.typesafe.sbt.packager.docker._
+
 ThisBuild / scalaVersion := "2.11.12"
 ThisBuild / organization := "com.mihainicola"
 ThisBuild / version := "0.0.1-SNAPSHOT"
@@ -6,8 +8,9 @@ val sparkVersion = "2.4.6"
 val akkaVersion = "2.5.20"
 val akkaHttpVersion = "10.1.8"
 
-lazy val root = (project in file(".")).
-  settings(
+lazy val root = (project in file("."))
+  .enablePlugins(JavaAppPackaging)
+  .settings(
     name := "kyme-scheduling-service",
 
     // sparkComponents := Seq(),
@@ -53,5 +56,15 @@ lazy val root = (project in file(".")).
     assemblyMergeStrategy in assembly := {
       case PathList("META-INF", xs @ _*) => MergeStrategy.discard
       case x => MergeStrategy.first
-    }
+    },
+
+    dockerRepository := Some("mihainicola"),
+    dockerBaseImage := "openjdk:8-jre-alpine",
+    dockerExposedPorts := Seq(7900),
+    packageName in Docker := "kyme-scheduling-service",
+    dockerCommands ++= Seq(
+      Cmd("USER", "root"),
+      ExecCmd("RUN", "apk", "add", "--no-cache", "bash")
+    )
+
   )

@@ -9,27 +9,22 @@ object JobSubmissionActor {
 
   private val jobManagerCounter = new AtomicLong(0)
 
-  def apply(inputDataToJobManager: Map[String, ActorRef[JobManagerCommand]]):
-    Behavior[JobSubmissionCommand] = {
-
+  def apply(
+    inputDataToJobManager: Map[String, ActorRef[JobManagerCommand]],
+    jobResultResponses: Map[String, JobResultResponse]
+  ): Behavior[JobSubmissionCommand] = {
     Behaviors.receive { (context, message) =>
       message match {
-        case NewJobRequest(inputDataLocation, searchKey, resultsLocation, replyTo) =>
+        case NewJobRequest(inputDataLocation, searchKey, resultsLocation, appJars, replyTo) =>
           inputDataToJobManager.get(inputDataLocation) match {
             case Some(jobManager) =>
               jobManager ! SubmitJob(
                 inputDataLocation,
                 searchKey,
                 resultsLocation,
+                appJars,
                 context.self,
                 replyTo)
-
-//              replyTo ! JobSubmissionResponse(s"Job Submitted. " +
-//                s"Shared Context will be started. " +
-//                s"Details for Job : " +
-//                s"inputDataLocation: ${inputDataLocation} " +
-//                s"searchKey: ${searchKey} " +
-//                s"resultsLocation: ${resultsLocation}")
 
               Behaviors.same
 
@@ -42,46 +37,70 @@ object JobSubmissionActor {
                 inputDataLocation,
                 searchKey,
                 resultsLocation,
+                appJars,
                 context.self,
                 replyTo)
 
-//              replyTo ! JobSubmissionResponse(s"Job Submitted. " +
-//                s"Data is available in shared context (memory). " +
-//                s"Details for Job : " +
-//                s"inputDataLocation: ${inputDataLocation} " +
-//                s"searchKey: ${searchKey} " +
-//                s"resultsLocation: ${resultsLocation}")
-
               JobSubmissionActor(
-                inputDataToJobManager + (inputDataLocation -> jobManager))
+                inputDataToJobManager + (inputDataLocation -> jobManager), jobResultResponses)
           }
 
-        case JobProcessing(jobId) =>
-          context.log.info(s"Job is Processing: ${jobId}")
+        case JobStartProcessing(jobId, searchKey) =>
+          val msg = s"Job is Processing: ${jobId}"
+          context.log.info(msg)
+
+          val temp = jobResultResponses.getOrElse(
+            jobId, JobResultResponse(jobId, searchKey, "")
+          )
+          val jobRequestResponse = temp.copy(output = temp.output.concat(msg))
+          JobSubmissionActor(
+            inputDataToJobManager,
+            jobResultResponses.-(jobId) + (jobId -> jobRequestResponse)
+          )
+
+        case JobStatusUpdate(jobId, searchKey, newStatus) =>
+          val msg = s"Job has new status: ${newStatus}"
+          context.log.info(msg)
+
+          val temp = jobResultResponses.getOrElse(
+            jobId, JobResultResponse(jobId, searchKey, "")
+          )
+          val jobRequestResponse = temp.copy(output = temp.output.concat(msg))
+          JobSubmissionActor(
+            inputDataToJobManager,
+            jobResultResponses.-(jobId) + (jobId -> jobRequestResponse)
+          )
+
+        case JobCompleted(jobId, searchKey, output) =>
+          val msg = s"Job has completed with results: ${output}"
+          context.log.info(msg)
+
+          val temp = jobResultResponses.getOrElse(
+            jobId, JobResultResponse(jobId, searchKey, "")
+          )
+          val jobRequestResponse = temp.copy(output = temp.output.concat(msg))
+          JobSubmissionActor(
+            inputDataToJobManager,
+            jobResultResponses.-(jobId) + (jobId -> jobRequestResponse)
+          )
+
+        case JobFailed(jobId, searchKey, error) =>
+          val msg = s"Job has failed with error: ${error}"
+          context.log.info(msg)
+
+          val temp = jobResultResponses.getOrElse(
+            jobId, JobResultResponse(jobId, searchKey, "")
+          )
+          val jobRequestResponse = temp.copy(output = temp.output.concat(msg))
+          JobSubmissionActor(
+            inputDataToJobManager,
+            jobResultResponses.-(jobId) + (jobId -> jobRequestResponse)
+          )
+
+        case JobResultRequest(jobId, replyTo) =>
+          replyTo ! jobResultResponses.get(jobId)
           Behaviors.same
       }
     }
   }
-
-//  sealed trait Command
-//  final case class SubmitKeySearchSparkJob(inputLocation: String,
-//    searchKey: String, resultsLocation: String) extends Command
-//
-//  def apply(): Behavior[Command] = {
-//    initJobSubmissionMain(Map.empty)
-//  }
-//
-//  def initJobSubmissionMain(
-//    inputDataToJobManager: Map[String, ActorRef[JobManager.Command]]): Behavior[Command] = {
-//
-//      Behaviors.receive { (context, message) => message match {
-//        case SubmitKeySearchSparkJob(inputLocation, searchKey, resultsLocation) =>
-//          // verify if there is a job amanager associated to the input data
-//          inputDataToJobManager.get(inputLocation) match {
-//            case Some(jobManagerActor) =>
-//              jobManagerActor !
-//          }
-//        }
-//      }
-//  }
 }

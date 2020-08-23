@@ -26,20 +26,27 @@ object JobManagerActor {
     Behaviors.receive { (context, message) =>
       (message, data) match {
         case (
-          job @ SubmitJob(inputDataLocation, searchKey , resultsLocation, _, _),
+          job @ SubmitJob(inputDataLocation, searchKey , resultsLocation, appJars, _,
+            replyJobResponseTo),
           Uninitialized
         ) =>
 
           val sharedComputeCtx = context.spawn(
             SharedComputeContextActor(
-              s"sharedComputeContext-${jobManagerId}",
-              inputDataLocation
+              s"sharedComputeContext-${jobManagerId}", inputDataLocation, appJars
             ),
             s"sharedComputeContext-${jobManagerId}"
           )
 
           sharedComputeCtx ! InitiateSharedComputeContext(context.self)
           context.watch(sharedComputeCtx)
+
+          replyJobResponseTo ! JobSubmissionResponse(s"Job Submitted and Queued. " +
+            s"Shared Context will be initiated." +
+            s"Details for Job : " +
+            s"inputDataLocation: ${inputDataLocation} " +
+            s"searchKey: ${searchKey} " +
+            s"resultsLocation: ${resultsLocation}")
 
           // enqueue the job into pendingSubmitted list
           val processing = Processing(Some(sharedComputeCtx), None, false, Queue(job), List.empty)
@@ -82,7 +89,7 @@ object JobManagerActor {
                   submitJob.resultsLocation
                 ),
                 name = s"job-${id}")
-              newJob ! StartComputeJob(jobSubmission, context.self, submitJob.replyJobResponseTo)
+              newJob ! StartComputeJob(jobSubmission, submitJob.replyJobProcessingStatusTo)
               handlePendingJob(jobSubmission, tail, newJob :: spawnedJobs)
             }
           }
@@ -103,7 +110,8 @@ object JobManagerActor {
           }
 
         case (
-          job @ SubmitJob(_, searchKey, resultsLocation, _, replyJobResponseTo),
+          job @ SubmitJob(inputDataLocation, searchKey, resultsLocation, _,
+            replyJobProcessingStatusTo, replyJobResponseTo),
           processing @ Processing(
             _,
             maybeSparkJobSubmission,
@@ -114,15 +122,31 @@ object JobManagerActor {
             // if dataLoaded into memory, start compute job
             // otherwise, add to pending jobs
           if (!dataLoaded) {
+
+            replyJobResponseTo ! JobSubmissionResponse(s"Job Submitted and Queued. " +
+              s"Data is loading into shared context (memory)." +
+              s"Details for Job : " +
+              s"inputDataLocation: ${inputDataLocation} " +
+              s"searchKey: ${searchKey} " +
+              s"resultsLocation: ${resultsLocation}")
+
             JobManagerActor(
               jobManagerId,
               processing.copy(pendingSubmittedJobs = pendingSubmittedJobs.enqueue(job))
             )
           } else {
+
+            replyJobResponseTo ! JobSubmissionResponse(s"Job Submitted and Run. " +
+              s"Data is available in shared context (memory)." +
+              s"Details for Job : " +
+              s"inputDataLocation: ${inputDataLocation} " +
+              s"searchKey: ${searchKey} " +
+              s"resultsLocation: ${resultsLocation}")
+
             maybeSparkJobSubmission.map(jobSubmission => {
               val id = jobCounter.incrementAndGet()
               val newJob = context.spawn(JobActor(s"job-${id}", searchKey, resultsLocation), s"job-${id}")
-              newJob ! StartComputeJob(jobSubmission, context.self, replyJobResponseTo)
+              newJob ! StartComputeJob(jobSubmission, replyJobProcessingStatusTo)
               newJob
             }) match {
               case Some(newJob) =>

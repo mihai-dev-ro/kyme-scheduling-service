@@ -19,12 +19,22 @@ final case class NewJobRequest(
   inputDataLocation: String,
   searchKey: String,
   resultsLocation: String,
+  appJars: String,
   replyTo: ActorRef[JobSubmissionResponse]) extends JobSubmissionCommand
-
-final case class JobProcessing(jobId: String) extends JobSubmissionCommand
-
 final case class JobSubmissionResponse(message: String)
 
+sealed trait JobProcessingStatus extends JobSubmissionCommand
+final case class JobStartProcessing(jobId: String, searchKey: String) extends JobProcessingStatus
+final case class JobStatusUpdate(jobId: String, searchKey: String, newStatus: String)
+  extends JobProcessingStatus
+final case class JobCompleted(jobId: String, searchKey: String, output: String)
+  extends JobProcessingStatus
+final case class JobFailed(jobId: String, searchKey: String, error: String)
+  extends JobProcessingStatus
+
+final case class JobResultRequest(jobId: String, replyTo: ActorRef[Option[JobResultResponse]])
+  extends JobSubmissionCommand
+final case class JobResultResponse(jobId: String, searchKey: String, output: String)
 
 /** 2. Messages exchanged with Job Manager
  *
@@ -38,9 +48,12 @@ final case class JobSubmissionResponse(message: String)
  */
 sealed trait JobManagerCommand
 
-final case class SubmitJob(inputDataLocation: String,
-  searchKey: String, resultsLocation: String,
-  replyTo: ActorRef[JobProcessing],
+final case class SubmitJob(
+  inputDataLocation: String,
+  searchKey: String,
+  resultsLocation: String,
+  appJars: String,
+  replyJobProcessingStatusTo: ActorRef[JobProcessingStatus],
   replyJobResponseTo: ActorRef[JobSubmissionResponse])
   extends JobManagerCommand
 
@@ -87,30 +100,21 @@ final case class LoadDataInSharedComputeContext(
 sealed trait JobCommand
 final case class StartComputeJob(
   jobSubmission: KeySearchJobSubmission,
-  replyTo: ActorRef[JobManagerCommand],
-  replyJobResponseTo: ActorRef[JobSubmissionResponse]
+  replyJobProcessingStatusTo: ActorRef[JobProcessingStatus]
 ) extends JobCommand
-final case class JobStatusUpdate(newStatus: String) extends JobCommand
-final case class JobResultsComputed(results: Array[String], makespanSummary: String)
-  extends JobCommand
-
 
 /**
  * Monitors the status of submitted Job.
  * It is in communication with Livy Services
  */
 sealed trait JobStatusCommand
-final case class GetJobStatus(
-  replyTo: ActorRef[JobStatusUpdate],
-  replyJobResponseTo: ActorRef[JobSubmissionResponse]
-) extends JobStatusCommand
+final case class GetJobStatus(replyJobProcessingStatusTo: ActorRef[JobProcessingStatus])
+  extends JobStatusCommand
 
 
 /**
  * Holds to the results of the job
  */
 sealed trait JobResultsCommand
-final case class GetJobResults(
-  replyTo: ActorRef[JobResultsComputed],
-  replyJobResponseTo: ActorRef[JobSubmissionResponse]
-) extends JobResultsCommand
+final case class GetJobResults(replyJobProcessingStatusTo: ActorRef[JobProcessingStatus])
+  extends JobResultsCommand
