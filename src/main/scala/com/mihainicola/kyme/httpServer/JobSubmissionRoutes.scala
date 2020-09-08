@@ -5,6 +5,7 @@ import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import spray.json.DefaultJsonProtocol._
 import akka.util.Timeout
 import com.mihainicola.kyme.Model.JobSubmission
 import com.mihainicola.kyme.actors._
@@ -29,7 +30,8 @@ class JobSubmissionRoutes(
 
   def submitJob(jobSubmission: JobSubmission): Future[JobSubmissionResponse] =
     jobSubmissionCoordinator ? (ref => NewJobRequest(
-      jobSubmission.inputLocation,
+      jobSubmission.inputRootFileLocation,
+      jobSubmission.nbFiles,
       jobSubmission.searchKey,
       jobSubmission.resultsLocation,
       jobSubmission.appJars,
@@ -37,6 +39,14 @@ class JobSubmissionRoutes(
 
   def getJobResult(jobId: String): Future[Option[JobResultResponse]] = {
     jobSubmissionCoordinator ? (ref => JobResultRequest(jobId, ref))
+  }
+
+  def getAllJobs(): Future[List[JobResultResponse]] = {
+    jobSubmissionCoordinator ? (ref => ListAllJobs(ref))
+  }
+
+  def stopSharedComputeContext(jobSetManagerId: String): Future[Option[String]] = {
+    jobSubmissionCoordinator ? (ref => ShutdownSharedComputeContext(jobSetManagerId, ref))
   }
 
 
@@ -56,13 +66,32 @@ class JobSubmissionRoutes(
                   }
                 }
               })
-          },
-          path(Segment) { jobId =>
-            val maybeJobResults: Future[Option[JobResultResponse]] = getJobResult(jobId)
-            rejectEmptyResponse {
-              complete(maybeJobResults)
+          }
+        )
+      }
+    },
+    pathPrefix("jobs") {
+      concat(
+        pathEnd {
+          get {
+              onSuccess(getAllJobs()) { jobs =>
+                complete(jobs)
             }
-          })
+          }
+        },
+        path(Segment) { jobId =>
+          val maybeJobResults: Future[Option[JobResultResponse]] = getJobResult(jobId)
+          rejectEmptyResponse {
+            complete(maybeJobResults)
+          }
+        }
+      )
+    },
+    pathPrefix("jobSetManager-stop") {
+      path(Segment) { jobSetManagerId =>
+        rejectEmptyResponse {
+          complete(stopSharedComputeContext(jobSetManagerId))
+        }
       }
     },
     path("alive") {

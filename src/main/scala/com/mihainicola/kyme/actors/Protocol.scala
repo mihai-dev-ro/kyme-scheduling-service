@@ -1,7 +1,7 @@
 package com.mihainicola.kyme.actors
 
 import akka.actor.typed.ActorRef
-import com.mihainicola.KeySearchJobSubmission
+import com.mihainicola.sparkjobfull.KeySearchJobSubmission
 
 /** 1. Messages to which the main, top level, Actor responds to
  *
@@ -16,7 +16,8 @@ import com.mihainicola.KeySearchJobSubmission
 sealed trait JobSubmissionCommand
 
 final case class NewJobRequest(
-  inputDataLocation: String,
+  inputRootFileLocation: String,
+  nbFiles: Int,
   searchKey: String,
   resultsLocation: String,
   appJars: String,
@@ -24,17 +25,34 @@ final case class NewJobRequest(
 final case class JobSubmissionResponse(message: String)
 
 sealed trait JobProcessingStatus extends JobSubmissionCommand
-final case class JobStartProcessing(jobId: String, searchKey: String) extends JobProcessingStatus
+final case class JobStarted(jobId: String, searchKey: String, startTime: Long)
+  extends JobProcessingStatus
+final case class JobStartProcessing(jobId: String, searchKey: String)
+  extends JobProcessingStatus
 final case class JobStatusUpdate(jobId: String, searchKey: String, newStatus: String)
   extends JobProcessingStatus
-final case class JobCompleted(jobId: String, searchKey: String, output: String)
+final case class JobCompleted(jobId: String, searchKey: String, output: String, endTime: Long)
   extends JobProcessingStatus
-final case class JobFailed(jobId: String, searchKey: String, error: String)
+final case class JobFailed(jobId: String, searchKey: String, error: String, endTime: Long)
   extends JobProcessingStatus
 
 final case class JobResultRequest(jobId: String, replyTo: ActorRef[Option[JobResultResponse]])
   extends JobSubmissionCommand
-final case class JobResultResponse(jobId: String, searchKey: String, output: String)
+final case class JobResultResponse(
+  jobId: String,
+  searchKey: String,
+  startTime: Long = 0,
+  endTime: Long = 0,
+  duration: Double = 0,
+  output: String = "")
+
+final case class ListAllJobs(replyTo: ActorRef[List[JobResultResponse]])
+  extends JobSubmissionCommand
+
+final case class ShutdownSharedComputeContext(
+  jobSetManagerId: String,
+  replyTo: ActorRef[Option[String]]
+) extends JobSubmissionCommand
 
 /** 2. Messages exchanged with Job Manager
  *
@@ -46,23 +64,28 @@ final case class JobResultResponse(jobId: String, searchKey: String, output: Str
  *  use a Queue instead of a Set, that will keep the order of submission.
  *  - it keep track of last status of the jobs
  */
-sealed trait JobManagerCommand
+sealed trait JobSetManagerCommand
 
 final case class SubmitJob(
-  inputDataLocation: String,
+  inputRootFileLocation: String,
+  nbFiles: Int,
   searchKey: String,
   resultsLocation: String,
   appJars: String,
   replyJobProcessingStatusTo: ActorRef[JobProcessingStatus],
   replyJobResponseTo: ActorRef[JobSubmissionResponse])
-  extends JobManagerCommand
+  extends JobSetManagerCommand
 
-final case class DataLoaded(summaryNbLines: Long) extends JobManagerCommand
+final case class DataLoaded(summaryNbLines: Long) extends JobSetManagerCommand
 
 final case class SharedContextInitiated(jobSubmission: KeySearchJobSubmission)
-  extends JobManagerCommand
+  extends JobSetManagerCommand
 
-final case class ComputeJobStarted(jobId: String) extends JobManagerCommand
+final case class ComputeJobSetStarted(jobId: String) extends JobSetManagerCommand
+
+final object StopSharedComputeContext extends JobSetManagerCommand
+
+final case class JobCompletionEvent(jobId: String) extends JobSetManagerCommand
 
 
 /** 3. Actor that manages the lifecycle of a Spark Context
@@ -77,7 +100,7 @@ final case class ComputeJobStarted(jobId: String) extends JobManagerCommand
  */
 sealed trait SharedComputeContextCommand
 
-final case class InitiateSharedComputeContext(replyTo: ActorRef[SharedContextInitiated])
+  final case class InitiateSharedComputeContext(replyTo: ActorRef[SharedContextInitiated])
   extends SharedComputeContextCommand
 
 final case class LoadDataInSharedComputeContext(
@@ -100,6 +123,7 @@ final case class LoadDataInSharedComputeContext(
 sealed trait JobCommand
 final case class StartComputeJob(
   jobSubmission: KeySearchJobSubmission,
+  replyJobCompletionEventTo: ActorRef[JobCompletionEvent],
   replyJobProcessingStatusTo: ActorRef[JobProcessingStatus]
 ) extends JobCommand
 
@@ -108,13 +132,17 @@ final case class StartComputeJob(
  * It is in communication with Livy Services
  */
 sealed trait JobStatusCommand
-final case class GetJobStatus(replyJobProcessingStatusTo: ActorRef[JobProcessingStatus])
-  extends JobStatusCommand
+final case class GetJobStatus(
+  replyJobCompletionEventTo: ActorRef[JobCompletionEvent],
+  replyJobProcessingStatusTo: ActorRef[JobProcessingStatus]
+) extends JobStatusCommand
 
 
 /**
  * Holds to the results of the job
  */
 sealed trait JobResultsCommand
-final case class GetJobResults(replyJobProcessingStatusTo: ActorRef[JobProcessingStatus])
-  extends JobResultsCommand
+final case class GetJobResults(
+  replyJobCompletionEventTo: ActorRef[JobCompletionEvent],
+  replyJobProcessingStatusTo: ActorRef[JobProcessingStatus]
+) extends JobResultsCommand

@@ -19,7 +19,7 @@ object JobSubmissionAkkaHttpServer {
     implicit val materializer: ActorMaterializer = ActorMaterializer()(ctx.system.toUntyped)
     implicit val ec: ExecutionContextExecutor = ctx.system.executionContext
 
-    val userSubmissionRoutesRef = ctx.spawn(JobSubmissionActor(Map.empty, Map.empty), "jobSubmissionMainActor")
+    val userSubmissionRoutesRef = ctx.spawn(JobSubmissionServerActor(Map.empty, Map.empty), "jobSubmissionServerActor")
 
     val routes = new JobSubmissionRoutes(ctx.system, userSubmissionRoutesRef)
 

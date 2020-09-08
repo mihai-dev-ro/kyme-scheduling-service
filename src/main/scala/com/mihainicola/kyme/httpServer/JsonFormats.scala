@@ -8,9 +8,9 @@ object JsonFormats {
   // import the default encoders for primitive types (Int, String, Lists etc)
   import DefaultJsonProtocol._
 
-  implicit val jobSubmissionJsonFormat = jsonFormat4(JobSubmission)
+  implicit val jobSubmissionJsonFormat = jsonFormat5(JobSubmission)
 
   implicit val jobSubmissionResponseJsonFormat = jsonFormat1(JobSubmissionResponse)
 
-  implicit val jobResultResponseJsonFormat = jsonFormat3(JobResultResponse)
+  implicit val jobResultResponseJsonFormat = jsonFormat6(JobResultResponse)
 }

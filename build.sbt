@@ -33,7 +33,7 @@ lazy val root = (project in file("."))
       "org.apache.livy"     %  "livy-client-http"   % "0.7.0-incubating",
       "org.apache.livy"     %% "livy-scala-api"     % "0.7.0-incubating",
 
-      "com.mihainicola"     %% "spark-job"          % "0.0.1-SNAPSHOT"      % Compile changing(),
+      "com.mihainicola"     %% "kyme-sparkjobfull"   % "0.0.1-SNAPSHOT"      % Compile changing(),
 
       "org.scalatest"       %% "scalatest"          % "3.0.1"               % Test,
       "org.slf4j"           % "slf4j-api"           % "1.8.0-beta4",

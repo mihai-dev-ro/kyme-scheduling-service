@@ -15,12 +15,14 @@ object JobStatusActor {
   ): Behavior[JobStatusCommand] = {
     Behaviors.receive { (context, message) =>
       message match {
-        case GetJobStatus(replyJobProcessingStatusTo) =>
+        case GetJobStatus(replyJobCompletionEventTo, replyJobProcessingStatusTo) =>
           jobHandle.onComplete({
             case Success(_) =>
+              replyJobCompletionEventTo ! JobCompletionEvent(jobId)
               replyJobProcessingStatusTo ! JobStatusUpdate(jobId, searchKey, "Completed")
             case Failure(e) => {
-              replyJobProcessingStatusTo ! JobFailed(jobId, searchKey, e.toString())
+              replyJobCompletionEventTo ! JobCompletionEvent(jobId)
+              replyJobProcessingStatusTo ! JobFailed(jobId, searchKey, e.toString(), System.nanoTime())
             }
           })
           jobHandle.onJobQueued({ () =>
